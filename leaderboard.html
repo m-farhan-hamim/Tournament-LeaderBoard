@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tournament Leaderboard BD</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(-45deg, #0f172a, #1e293b, #334155, #1e293b);
+            background-size: 400% 400%;
+            animation: gradientBG 20s ease infinite;
+            overflow-x: hidden;
+        }
+
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .leaderboard-row {
+            transform-style: preserve-3d;
+            transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            will-change: transform;
+        }
+
+        .leaderboard-row:hover {
+            transform: perspective(1200px) rotateX(5deg) translateY(-8px) translateZ(40px) scale(1.02);
+            box-shadow: 0 30px 50px rgba(0, 0, 0, 0.5);
+            cursor: pointer;
+        }
+
+        .rank-1 { background-image: linear-gradient(to right, #fef08a, #facc15); color: #422006; }
+        .rank-2 { background-image: linear-gradient(to right, #e5e7eb, #d1d5db); color: #1f2937; }
+        .rank-3 { background-image: linear-gradient(to right, #fca5a5, #ef4444); color: #450a0a; }
+
+        .spotlight {
+            box-shadow: 0 0 20px 7px rgba(250, 204, 21, 0.4), 0 0 40px 15px rgba(250, 204, 21, 0.1);
+            border: 1px solid rgba(253, 224, 71, 0.8);
+        }
+        
+        .animate-pop-in {
+            animation: popIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+            opacity: 0;
+        }
+
+        @keyframes popIn {
+            from { opacity: 0; transform: translateY(30px) scale(0.95); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        
+        .rank-tag { padding: 4px 12px; border-radius: 9999px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
+        .tag-manager { background-color: #c084fc; color: #2e1065; box-shadow: 0 0 10px #c084fc; }
+        .tag-moderator { background-color: #60a5fa; color: #1e3a8a; box-shadow: 0 0 10px #60a5fa; }
+        .tag-host { background-color: #f97316; color: #7c2d12; box-shadow: 0 0 10px #f97316; }
+        .tag-player { background-color: #4ade80; color: #14532d; box-shadow: 0 0 10px #4ade80; }
+
+        .tab-button { transition: all 0.3s ease; border-bottom: 3px solid transparent; }
+        .tab-button.active { color: #facc15; border-bottom-color: #facc15; transform: translateY(-2px); }
+
+        /* Profile Modal Styles */
+        #profile-modal { transition: opacity 0.3s ease-in-out; }
+        #profile-modal-panel { transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease-in-out; }
+        #profile-modal.modal-hidden { opacity: 0; pointer-events: none; }
+        #profile-modal.modal-hidden #profile-modal-panel { transform: scale(0.95) translateY(20px); opacity: 0; }
+    </style>
+</head>
+<body class="text-gray-200">
+    <div class="container mx-auto px-2 sm:px-4 py-8 sm:py-12">
+        <header class="text-center mb-10">
+            <h1 class="text-4xl md:text-6xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-red-400 to-indigo-400 pb-2">
+                Tournament Leaderboard
+            </h1>
+            <p class="mt-1 text-base md:text-lg text-gray-400" id="current-time"></p>
+        </header>
+
+        <div class="flex justify-center space-x-2 sm:space-x-8 mb-8" id="ranking-tabs">
+            <button class="tab-button active text-sm sm:text-lg font-semibold py-2 px-2 sm:px-4" data-ranking="global">Global Ranking</button>
+            <button class="tab-button text-sm sm:text-lg font-semibold py-2 px-2 sm:px-4 text-gray-400 hover:text-white" data-ranking="matches">Match Ranking</button>
+            <button class="tab-button text-sm sm:text-lg font-semibold py-2 px-2 sm:px-4 text-gray-400 hover:text-white" data-ranking="earnings">Earning Ranking</button>
+        </div>
+
+        <main class="max-w-4xl mx-auto">
+            <div class="bg-slate-800/50 backdrop-blur-xl rounded-2xl shadow-2xl overflow-hidden ring-1 ring-white/10">
+                <div class="grid grid-cols-12 gap-2 sm:gap-4 px-2 sm:px-6 py-4 text-[0.6rem] sm:text-sm font-semibold text-gray-400 border-b border-white/10 uppercase">
+                    <div class="col-span-2 text-center">Rank</div>
+                    <div class="col-span-4">Player</div>
+                    <div class="col-span-3 text-center">Matches</div>
+                    <div class="col-span-3 text-right">Earnings</div>
+                </div>
+                <div id="leaderboard-body" class="divide-y divide-white/10"></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Profile Modal -->
+    <div id="profile-modal" class="modal-hidden fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
+        <div id="profile-modal-panel" class="w-full max-w-2xl bg-slate-900/70 ring-1 ring-white/20 rounded-2xl shadow-2xl relative overflow-hidden">
+             <div class="p-6">
+                <button id="close-modal-btn" class="absolute top-4 right-4 text-gray-400 hover:text-white transition text-3xl leading-none">&times;</button>
+                <div class="flex flex-col sm:flex-row items-center sm:items-start gap-6">
+                    <div class="flex-shrink-0 text-center">
+                        <img id="profile-img" src="" alt="Profile" class="w-28 h-28 rounded-full object-cover ring-4 ring-slate-700">
+                        <span id="profile-tag" class="rank-tag mt-4 inline-block"></span>
+                    </div>
+                    <div class="w-full text-center sm:text-left">
+                        <div class="flex items-center justify-center sm:justify-start gap-3">
+                            <h2 id="profile-name" class="text-3xl font-bold text-white"></h2>
+                            <img id="profile-country-flag" src="" class="h-6 rounded-sm" alt="Country Flag">
+                        </div>
+                        <div class="mt-2 bg-slate-800/50 rounded-md px-3 py-1 inline-block">
+                           <p class="text-xs text-gray-400">UID: <span id="profile-uid" class="font-mono text-gray-200"></span></p>
+                        </div>
+                        <p id="profile-bio" class="text-gray-400 mt-4 text-sm"></p>
+                        <div class="mt-4 flex justify-center sm:justify-start space-x-4" id="social-links"></div>
+                    </div>
+                </div>
+                <div class="mt-6 border-t border-white/10 pt-4" id="stats-section">
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+                        <div><p class="text-xs text-gray-400">WIN RATE</p><p id="profile-winrate" class="text-xl font-semibold text-green-400"></p></div>
+                        <div><p class="text-xs text-gray-400">K/D RATIO</p><p id="profile-kd" class="text-xl font-semibold text-red-400"></p></div>
+                        <div><p class="text-xs text-gray-400">LEVEL</p><p id="profile-level" class="text-xl font-semibold text-blue-400"></p></div>
+                        <div><p class="text-xs text-gray-400">JOINED</p><p id="profile-joined" class="text-xl font-semibold text-purple-400"></p></div>
+                    </div>
+                </div>
+                 <div id="achievements-section" class="mt-6 border-t border-white/10 pt-4">
+                    <h3 class="font-bold text-white text-center sm:text-left">Achievements</h3>
+                    <div id="profile-achievements" class="mt-2 space-y-2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // === REAL USER DATA ===
+            const users = [
+                { 
+                    name: '★Dark¥Loard★', 
+                    matches: 4, 
+                    earnings: 6400, 
+                    uid: '8426776250', 
+                    img: 'https://placehold.co/128x128/60a5fa/1e3a8a?text=DL', 
+                    tag: 'Moderator', 
+                    bio: 'A vigilant moderator keeping the tournament fair.',
+                    joinDate: '2021-05-10',
+                    winRate: '5%', kd: 1.5%, level: 51,
+                    country: { name: 'Bangladesh', code: 'BD' },
+                    achievements: [{ icon: '🛡️', text: 'Fair Play Guardian' }, { icon: '🎯', text: 'Top Fragger' }],
+                    socials: { youtube: '#', facebook: '#' }
+                },
+                { 
+                    name: 'T22 Bot', 
+                    matches: 0, 
+                    earnings: 0, 
+                    uid: 'N/A', 
+                    img: 'https://placehold.co/128x128/c084fc/2e1065?text=T22', 
+                    tag: 'Manager', 
+                    bio: 'The efficient manager ensuring everything runs smoothly.',
+                    joinDate: 'N/A',
+                },
+                { 
+                    name: 'Garena International', 
+                    matches: 0, 
+                    earnings: 0, 
+                    uid: 'N/A', 
+                    img: 'https://placehold.co/128x128/f97316/7c2d12?text=GI', 
+                    tag: 'Host', 
+                    bio: 'The official host of the tournament.',
+                    joinDate: 'N/A',
+                },
+            ];
+
+            const leaderboardBody = document.getElementById('leaderboard-body');
+            const tabs = document.querySelectorAll('.tab-button');
+            const modal = document.getElementById('profile-modal');
+            const closeModalBtn = document.getElementById('close-modal-btn');
+            
+            const updateTime = () => {
+                const timeEl = document.getElementById('current-time');
+                const now = new Date();
+                const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dhaka' };
+                timeEl.textContent = `Updated: ${now.toLocaleString('en-US', options)} (BDT)`;
+            };
+            
+            // Set initial time as requested
+            const timeEl = document.getElementById('current-time');
+            timeEl.textContent = "Updated: Sunday, October 19, 2025 at 10:41 PM (BDT)";
+            setInterval(updateTime, 60000); // Continue updating it live
+
+            const getTagClass = (tag) => {
+                const lower = tag.toLowerCase();
+                if (lower.includes('manager')) return 'tag-manager';
+                if (lower.includes('moderator')) return 'tag-moderator';
+                if (lower.includes('host')) return 'tag-host';
+                return 'tag-player';
+            };
+
+            const socialIcons = {
+                facebook: `<svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 16 16" fill="currentColor"><path d="M16 8.049c0-4.446-3.582-8.05-8-8.05C3.58 0-.002 3.603-.002 8.05c0 4.017 2.926 7.347 6.75 7.951v-5.625h-2.03V8.05H6.75V6.275c0-2.017 1.195-3.131 3.022-3.131.876 0 1.791.157 1.791.157v1.98h-1.009c-.993 0-1.303.621-1.303 1.258v1.51h2.218l-.354 2.326H9.25V16c3.824-.604 6.75-3.934 6.75-7.951z"/></svg>`,
+                youtube: `<svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 16 16" fill="currentColor"><path d="M8.051 1.999a.6.6 0 0 0-.59 0l-6.25 3.333a.6.6 0 0 0-.41.54V12a.6.6 0 0 0 .41.54l6.25 3.333a.6.6 0 0 0 .59 0l6.25-3.333a.6.6 0 0 0 .41-.54V5.873a.6.6 0 0 0-.41-.54l-6.25-3.333zM6.3 9.697V6.303l3.353 1.696L6.3 9.697z"/></svg>`,
+            };
+            
+            const showProfile = (user) => {
+                document.getElementById('profile-img').src = user.img;
+                document.getElementById('profile-name').textContent = user.name;
+                document.getElementById('profile-uid').textContent = user.uid;
+                document.getElementById('profile-bio').textContent = user.bio || '';
+                
+                const countryFlag = document.getElementById('profile-country-flag');
+                if(user.country && user.country.code){
+                    countryFlag.src = `https://flagcdn.com/w40/${user.country.code.toLowerCase()}.png`;
+                    countryFlag.style.display = 'inline-block';
+                } else {
+                    countryFlag.style.display = 'none';
+                }
+
+                const statsSection = document.getElementById('stats-section');
+                if (user.winRate) {
+                    statsSection.style.display = 'block';
+                    document.getElementById('profile-winrate').textContent = user.winRate || 'N/A';
+                    document.getElementById('profile-kd').textContent = user.kd || 'N/A';
+                    document.getElementById('profile-level').textContent = user.level || 'N/A';
+                    const joinedEl = document.getElementById('profile-joined');
+                    // *** FIX: Corrected typo and ensured "N/A" is handled properly ***
+                    joinedEl.textContent = user.joinDate === 'N/A' ? 'N/A' : new Date(user.joinDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
+                } else {
+                    statsSection.style.display = 'none';
+                }
+
+
+                const tagEl = document.getElementById('profile-tag');
+                tagEl.textContent = user.tag;
+                tagEl.className = `rank-tag mt-4 inline-block ${getTagClass(user.tag)}`;
+
+                const achievementsContainer = document.getElementById('profile-achievements');
+                const achievementsSection = document.getElementById('achievements-section');
+                achievementsContainer.innerHTML = '';
+                if(user.achievements && user.achievements.length > 0){
+                    achievementsSection.style.display = 'block';
+                    user.achievements.forEach((ach) => {
+                        const el = document.createElement('div');
+                        el.className = 'flex items-center gap-3 bg-slate-800/50 p-2 rounded-lg';
+                        el.innerHTML = `<span class="text-xl">${ach.icon}</span> <p class="text-sm">${ach.text}</p>`;
+                        achievementsContainer.appendChild(el);
+                    });
+                } else {
+                    achievementsSection.style.display = 'none';
+                }
+
+                const socialContainer = document.getElementById('social-links');
+                socialContainer.innerHTML = '';
+                if(user.socials && Object.keys(user.socials).length > 0) {
+                    socialContainer.style.display = 'flex';
+                    Object.entries(user.socials).forEach(([platform, link]) => {
+                        if(socialIcons[platform]){
+                            const a = document.createElement('a');
+                            a.href = link;
+                            a.target = '_blank';
+                            a.className = 'text-gray-400 hover:text-white transition';
+                            a.innerHTML = socialIcons[platform];
+                            socialContainer.appendChild(a);
+                        }
+                    });
+                } else {
+                    socialContainer.style.display = 'none';
+                }
+                
+                modal.classList.remove('modal-hidden');
+            };
+
+            const hideProfile = () => modal.classList.add('modal-hidden');
+
+            const renderLeaderboard = (sortedUsers) => {
+                leaderboardBody.style.opacity = '0';
+                setTimeout(() => {
+                    leaderboardBody.innerHTML = ''; 
+                    sortedUsers.forEach((user, index) => {
+                        const rank = index + 1;
+                        let rankClass = 'bg-slate-800/80';
+                        if (user.earnings > 0 || user.matches > 0) {
+                             if(rank === 1) rankClass = 'rank-1 spotlight';
+                             else if(rank === 2) rankClass = 'rank-2';
+                             else if(rank === 3) rankClass = 'rank-3';
+                        }
+                        
+                        const animationDelay = `${index * 80}ms`;
+                        const row = document.createElement('div');
+                        row.className = `leaderboard-row grid grid-cols-12 gap-2 sm:gap-4 items-center px-2 sm:px-6 py-3 ${rankClass} animate-pop-in`;
+                        row.style.animationDelay = animationDelay;
+                        row.addEventListener('click', () => showProfile(user));
+                        const formattedEarnings = new Intl.NumberFormat('bn-BD', { style: 'currency', currency: 'BDT', minimumFractionDigits: 0 }).format(user.earnings);
+                        row.innerHTML = `
+                            <div class="col-span-2 text-center font-bold text-sm sm:text-lg">${rank}</div>
+                            <div class="col-span-4 flex items-center gap-2 sm:gap-3 overflow-hidden">
+                                <img src="${user.img.replace('128x128', '64x64')}" alt="${user.name}" class="w-8 h-8 sm:w-12 sm:h-12 rounded-full object-cover border-2 border-white/10 flex-shrink-0">
+                                <p class="font-semibold text-xs sm:text-lg user-name truncate">${user.name}</p>
+                            </div>
+                            <div class="col-span-3 text-center text-gray-300 text-xs sm:text-base font-medium">${user.matches}</div>
+                            <div class="col-span-3 text-right font-bold text-xs sm:text-base text-green-400">${formattedEarnings}</div>`;
+                        leaderboardBody.appendChild(row);
+                    });
+                    leaderboardBody.style.opacity = '1';
+                }, 300);
+            };
+            
+            const sortUsers = (type) => {
+                const sorted = [...users]; 
+                if (type === 'matches') sorted.sort((a, b) => b.matches - a.matches || b.earnings - a.earnings);
+                else if (type === 'earnings') sorted.sort((a, b) => b.earnings - a.earnings || b.matches - a.matches);
+                else {
+                    const maxEarnings = Math.max(1, ...users.map(u => u.earnings));
+                    const maxMatches = Math.max(1, ...users.map(u => u.matches));
+                    const calculateScore = (user) => ((user.earnings / maxEarnings) * 0.7) + ((user.matches / maxMatches) * 0.3);
+                    sorted.sort((a, b) => calculateScore(b) - calculateScore(a));
+                }
+                renderLeaderboard(sorted);
+            };
+            
+            tabs.forEach(tab => tab.addEventListener('click', () => {
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                sortUsers(tab.getAttribute('data-ranking'));
+            }));
+
+            closeModalBtn.addEventListener('click', hideProfile);
+            modal.addEventListener('click', (e) => e.target === modal && hideProfile());
+            document.addEventListener('keydown', (e) => e.key === 'Escape' && hideProfile());
+
+            sortUsers('global');
+        });
+    </script>
+</body>
+</html>
+
+
